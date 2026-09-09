@@ -39,6 +39,7 @@
 <br>
 <br>
 <br>7、荣格心智模型看这里 https://raw.githubusercontent.com/JackPanrAcc/JungMentalModels/refs/heads/main/JungMentalModels.jpg
+<br>源文件是同目录下的xls 文件
 <br>
 <br>
 <br>8、训练过程中有可能出现死循环和严重幻觉。
