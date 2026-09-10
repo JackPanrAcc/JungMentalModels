@@ -33,8 +33,8 @@
 <br>
 <br>
 <br>
-<br>6、荣格心智模型体系demo 看这里 https://raw.githubusercontent.com/JackPanrAcc/JungMentalModels/refs/heads/main/JungMentalModels.jpg
-<br> 此看板的源文件是一个xls 文件，被放在同目录下
+<br>6、荣格心智模型体系demo 看板看这里 https://raw.githubusercontent.com/JackPanrAcc/JungMentalModels/refs/heads/main/JungMentalModels.jpg
+<br> 此看板的源文件JungMentalModels.xls 被放置在项目中的同级目录下
 <br>
 <br>
 <br>7、训练过程中会出现死循环和严重幻觉。
