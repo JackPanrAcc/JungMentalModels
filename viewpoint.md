@@ -64,4 +64,4 @@
 
 ---
 
- [完整文件看这里](https://raw.githubusercontent.com/JackPanrAcc/JungMentalModels/refs/heads/main/JungMentalModels.xls) 
+这是[《方案的源文件》](https://github.com/JackPanrAcc/JungMentalModels/blob/5a9566008d7a3e9eb60f6522ee90e38ddf7153c4/JungMentalModels.xlsx)
