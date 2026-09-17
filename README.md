@@ -86,4 +86,4 @@
 <br>
 <br>
 <br>
-<br>10、这里是[《文化比较版本》](topViewpoint.md)
+<br>10、这是[《文化比较版本》](viewpoint.md)。这是[《方案的源文件》](https://raw.githubusercontent.com/JackPanrAcc/JungMentalModels/refs/heads/main/JungMentalModels.xls) 
