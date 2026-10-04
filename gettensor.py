@@ -13,7 +13,7 @@ debug_case_list = [
   {"debug_case_traceid": "2", "debug_case_word": "语义2"},
 ]
 pyscript_dir = os.path.dirname(os.path.abspath(__file__))
-with open(os.path.join(pyscript_dir,"debug_case_list.json"), "r", encoding="utf-8") as f:
+with open(os.path.join(pyscript_dir,"gettensor_debug_case_list.json"), "r", encoding="utf-8") as f:
     debug_case_list = json.load(f)
 
 
