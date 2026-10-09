@@ -1,23 +1,32 @@
-# Author: jackpanr 261006
+# Author: jackpanr
+# Timely: 2026-10-06
 # Descript: 
-#   请先阅读并运行gettensor_load_intrinsicdim.py 提取大模型Intrinsic Dimensionality 相关的数据后。
-#   获得Intrinsic Dimensionality 后，本脚本文件中可以计算：
-#     1. 思考复杂度 = FreeenergyMaxuperank(embeddings, maxuperank)
-#     2. 自省肤浅度 = FreeenergyIntrospect(embeddings, introspect)
-#     3. 其中符号自由能公式 Freeenergy(base,this) = [1 - cosSimilarity(tensorBase-centerOfMassBase, tensorThis-centerOfMassThis)] * sqrt(tensorDim)
+#   请先阅读并运行gettensor_load_intrinsicdim.py 提取大模型Intrinsic Dimensionality 相关指标的具体数值。
+#   获得Intrinsic Dimensionality 具体数值后，可以使用本脚本计算：
+#     1. word的思考复杂度 = FreeenergyMaxuperank(embeddings, maxuperank)
+#     2. word的自省肤浅度 = FreeenergyIntrospect(embeddings, introspect)
+#     3. 符号自由能公式 Freeenergy(Base,This) = [1 - cosSimilarity(tensorBase-centerOfMassBase, tensorThis-centerOfMassThis)] * sqrt(tensorDim)
 #
-# 本脚本文件的处理逻辑
-#   第一段部分：从《重心文件》中读出三个重心，从filename_of_cases 读 word 计算“思考复杂度”和“自省肤浅度”然后输出完整报告
-#   第二段部分：从《张量缓存库文件》中读高频词的三个张量，基于《高频词表》中登记的权重计算三个语义空间的重心并保存
-#   第三段部分：在 WORD_FIRST>=0 时，轮询高频词表并提取对应的 embeddings、 maxuperank、 introspect 三层张量并保存在《张量缓存库文件》
+# 文脚本逻辑的结构
+#   第一段部分：从《重心文件》中读出三个重心，从path_debug_cases 中读 word，逐行计算“思考复杂度”和“自省肤浅度”然后输出报告
+#   第二段部分：从《三张量缓存库文件》中读高频词的三个张量，基于《高频词表》中登记的权重分别计算出三个语义空间的重心、并保存在《重心文件》
+#             删除《重心文件》将执行第二部分
+#   第三段部分：在 WORD_FIRST>=0 时，轮询高频词表并提取对应的 embeddings、 maxuperank、 introspect 三张量并保存在《三张量缓存库文件》
+#             删除《重心文件》，且删除《三张量缓存库文件》，将执行第三部分
+#             在《三张量缓存库文件》中删除“某高频词对应行”并修改脚本中的WORD_FIRST 将执行第三部分。如有必要删除《重心文件》以重新执行第二部分
 #
-# 高频词表来源是 https://blcu.edu.cn。下载后保存在本地 multi_domain_total_word_freq.txt。文件中每行一个词，包含单词和频率两个属性、用半角逗号分隔
+# 高频词表采用北语BCC语料库词频表 https://bcc.blcu.edu.cn/download。请将multi_domain_total_word_freq.txt 保存在脚本同一目录下
+#   高频词表文件中每行一个单词word。每单词包含“词”、“词频”属性，使用半角逗号分隔各属性
 #
 #
-# NOTE1: find_sublist_indices(){full_text.find()} 因为查单次位置。所以，提示词中多次出现 word 查询是错误的。严肃的做法是查字典
-#        本脚本中，token 左侧只有["你","说","的","是"]等 word，遂逐一确认token positions 之后硬编码
-# NOTE2: 高频词表第167行[一样]。分词器划分的token是[你说/的/是一/样/。/对/...']。无法确定词向量
-# NOTE3: 高频词表第179行[一起]。分词器划分的token是[你说/的/是一/起/。/对/...']。无法确定词向量
+# 对分词器相关算法的说明
+# a) find_sublist_indices(){full_text.find()}。因为查单次位置，所以，提示词中多次出现 word 时值可能是错误的。严肃的算法是查字典
+#    本实验的提示语中，word左侧只有["你","说","的","是"]。遂逐一确认token positions 之后硬编码
+# b) blcu版本高频词表第167行[一样]。分词器划分的token是[你说/的/是一/样/。/对/...']。确定词向量成本较高，后继数据分析工作中请直接剔除该word
+# c) blcu版本高频词表第179行[一起]。分词器划分的token是[你说/的/是一/起/。/对/...']。确定词向量成本较高，后继数据分析工作中请直接剔除该word
+# d) blcu版本高频词表第206行[一些]。分词器划分的token是[你说/的/是一/些/。/对/...']。确定词向量成本较高，后继数据分析工作中请直接剔除该word
+# e) blcu版本高频词表第222行[一直]。分词器划分的token是[你说/的/是一/直/。/对/...']。确定词向量成本较高，后继数据分析工作中请直接剔除该word
+# f) blcu版本高频词表第225行[一下]。分词器划分的token是[你说/的/是一/下/。/对/...']。确定词向量成本较高，后继数据分析工作中请直接剔除该word
 #
 
 
@@ -35,56 +44,56 @@ import gc
 
 
 
-#这是第三部分中读取高频词表的起始行，手工修改值将决定第三部分是否会运行
-WORD_FIRST = 0
+#手工修改 WORD_FIRST 值，将决定第三部分是否会运行。这是第三部分中读取高频词表的起始行，注意：高频词表顶部出现标题行时需要酌情计算
+WORD_FIRST = 222
 
 # 固定的输入提示语模板
 default_text = "你说的是{PAD4REPLACE}。对某些人来说这是错误的，或者说，有些时候有些有些场景这句话大概率是错误的，那么你想的是什么？"
 
-# 使用gettensor_load_intrinsicdim.py 脚本提取的大模型数据
-HIDDEN_DIM = 3584
-model_name = "Qwen/Qwen2.5-7B-Instruct"
-intrinsicdim_layer_index_embeddings = 0   # layer_number+1 即hiddenstate 数组中的index
-intrinsicdim_layer_index_maxuperank = 7   # layer_number+1 即hiddenstate 数组中的index
-intrinsicdim_layer_index_introspect = 23  # layer_number+1 即hiddenstate 数组中的index
-intrinsicdim_maxuperank = 3471.44
+
+# gettensor_load_intrinsicdim.py 脚本计算出的指标取值
+model_name = "Qwen/Qwen2.5-7B-Instruct"        # 大模型的标识
+hidden_state_tensordim = 3584                  # 大模型的张量维数tensorDim
+intrinsicdim_maxuperank_limit_dim = 3471.44    # 大模型的思考复杂度上限
+intrinsicdim_embeddings_layer_index = 0        # layer_number+1 即 hidden_state 数组中的index
+intrinsicdim_maxuperank_layer_index = 7        # layer_number+1 即 hidden_state 数组中的index
+intrinsicdim_introspect_layer_index = 23       # layer_number+1 即 hidden_state 数组中的index
 
 os.environ["HF_ENDPOINT"] = "https://hf-mirror.com"
 os.environ["HF_HUB_OFFLINE"] = "1" 
 
 
-# 文件名配置项
+# 文件名的配置
 pyscript_dir           = os.path.dirname(os.path.abspath(__file__))
-path_output            = os.path.join(pyscript_dir, "multi_domain_total_word_freq.report.txt")
-path_cases             = os.path.join(pyscript_dir, "multi_domain_total_word_freq.cases.json")
+path_debug_output      = os.path.join(pyscript_dir, "multi_domain_total_word_freq.report.txt")
+path_debug_cases       = os.path.join(pyscript_dir, "multi_domain_total_word_freq.cases.json")
 path_center_embeddings = os.path.join(pyscript_dir, "multi_domain_total_word_freq.masscenter.embeddings.txt")
 path_center_maxuperank = os.path.join(pyscript_dir, "multi_domain_total_word_freq.masscenter.maxuperank.txt")
 path_center_introspect = os.path.join(pyscript_dir, "multi_domain_total_word_freq.masscenter.introspect.txt")
-path_tensor            = os.path.join(pyscript_dir, "multi_domain_total_word_freq.tensor.txt")
+path_cached_tensors    = os.path.join(pyscript_dir, "multi_domain_total_word_freq.tensor.txt")
 path_freq              = os.path.join(pyscript_dir, "multi_domain_total_word_freq.txt")
 
 cached_tensors_embeddings_map = {}
 cached_tensors_maxuperank_map = {}
 cached_tensors_introspect_map = {}
-if os.path.exists(path_tensor):
-    print(f"正在加载三层张量缓存库: {os.path.basename(path_tensor)} ...")
-    with open(path_tensor, "r", encoding="utf-8") as f:
+if os.path.exists(path_cached_tensors):
+    print(f"正在加载 三张量缓存库: {os.path.basename(path_cached_tensors)} ...")
+    with open(path_cached_tensors, "r", encoding="utf-8") as f:
         for line in f:
-            # 【核心重构】：优先按 \t 切分
             parts_tabs = line.strip().split("\t")
             if len(parts_tabs) == 4:
                 w = str(parts_tabs[0]).strip()
-                
-                # 模块内部依然按空格切分出 3584 维向量
+
+                # 模块内按空格切分出 3584 维向量
                 emb_floats = parts_tabs[1].split()
                 max_floats = parts_tabs[2].split()
                 int_floats = parts_tabs[3].split()
-                
-                if len(emb_floats) == HIDDEN_DIM and len(max_floats) == HIDDEN_DIM and len(int_floats) == HIDDEN_DIM:
+                if len(emb_floats) == hidden_state_tensordim and len(max_floats) == hidden_state_tensordim and len(int_floats) == hidden_state_tensordim:
                     cached_tensors_embeddings_map[w] = torch.tensor([float(x) for x in emb_floats], dtype=torch.float16)
                     cached_tensors_maxuperank_map[w] = torch.tensor([float(x) for x in max_floats], dtype=torch.float16)
                     cached_tensors_introspect_map[w] = torch.tensor([float(x) for x in int_floats], dtype=torch.float16)
-    print(f"张量缓存库中一共加载了 {len(cached_tensors_embeddings_map)} 条记录")
+    print(f"从缓存中共加载了 {len(cached_tensors_embeddings_map)} 条有效记录")
+
 
 
 
@@ -139,9 +148,8 @@ def find_sublist_indices(tokenizer, input_ids_tensor, target_word):
     return res
 
 
-
 # 辅助函数：加载高频词
-def load_frequency_table(path, limit=500):
+def load_frequency_table_blcu(path, limit=500):
     words_freq_map = []
     if not os.path.exists(path): return words_freq_map
     with open(path, "r", encoding="utf-8") as f:
@@ -162,10 +170,11 @@ def load_frequency_table(path, limit=500):
 
 
 
+
 # ==================== 第一部分：加载测试用例，求解符号自由能 ====================
 if not all([os.path.exists(path_center_embeddings), os.path.exists(path_center_maxuperank), os.path.exists(path_center_introspect)]):
     print("\n【第一部分】 未执行。原因是未能读取《语义空间的重心》文件")
-elif not os.path.exists(path_cases):
+elif not os.path.exists(path_debug_cases):
     print("\n【第一部分】 未执行。原因是无法读取《测试用例配置文件 gettensor_test_cases.json》")
 else:
     with open(path_center_embeddings, "r", encoding="utf-8") as f_emb, \
@@ -175,7 +184,7 @@ else:
         c_max = torch.tensor([float(x) for x in f_max.read().strip().split()], dtype=torch.float16)
         c_int = torch.tensor([float(x) for x in f_int.read().strip().split()], dtype=torch.float16)
 
-    with open(path_cases, "r", encoding="utf-8") as f_case:
+    with open(path_debug_cases, "r", encoding="utf-8") as f_case:
         test_cases = json.load(f_case)
     print("\n【第一部分】 " + "="*70 + "\n读取用例文件，开逐行计算“思考复杂度”和“自省肤浅度”...")
 
@@ -205,10 +214,8 @@ else:
             inputs = {k: v.to(target_device) for k, v in inputs.items()}
 
             positions = find_sublist_indices(tokenizer, inputs["input_ids"], word)
-            if not positions: continue
-
             # --- 如果出现multiple tokens，则打印 work、 positions、 tokens ---
-            if len(positions)>1 or word in ["你说的是","你说的","说的是","你说","说的","的是","你","说","的","是"]:
+            if not positions or len(positions)>1 or word in ["你说的是","你说的","说的是","你说","说的","的是","你","说","的","是"]:
                 input_ids_list = inputs["input_ids"][0].cpu().tolist() 
                 all_tokens_diagnostic = []
                 for multipletokenidx, multipletokentid in enumerate(input_ids_list):
@@ -232,19 +239,20 @@ else:
             if word in ["说的"] and default_text.startswith("你说的是{PAD4REPLACE}"): positions=[2]
             if word in ["你","说","的","是"] and default_text.startswith("你说的是{PAD4REPLACE}"): positions=[2]
             # ----------------------------
+            if not positions: continue
 
 
             with torch.no_grad():
                 outputs = model(**inputs, output_hidden_states=True)
 
             # 提取对应层特征并计算均值
-            t_emb = outputs.hidden_states[intrinsicdim_layer_index_embeddings][0, positions, :].mean(dim=0)
-            t_max = outputs.hidden_states[intrinsicdim_layer_index_maxuperank][0, positions, :].mean(dim=0)
-            t_int = outputs.hidden_states[intrinsicdim_layer_index_introspect][0, positions, :].mean(dim=0)
+            t_emb = outputs.hidden_states[intrinsicdim_embeddings_layer_index][0, positions, :].mean(dim=0)
+            t_max = outputs.hidden_states[intrinsicdim_maxuperank_layer_index][0, positions, :].mean(dim=0)
+            t_int = outputs.hidden_states[intrinsicdim_introspect_layer_index][0, positions, :].mean(dim=0)
 
         # ====================================================================
         # 安全防御升级：强行将所有外来张量同步至 target_device，并统一转化为 float32
-        #             注意有可能张量缓存库文件中是一个精度，切平台实时跑出来是另精度
+        #             注意，也有可能缓存文件中是一个精度，切平台实时跑出来是另一个精度
         # ====================================================================
         t_emb_f32 = t_emb.to(device=target_device, dtype=torch.float32)
         t_max_f32 = t_max.to(device=target_device, dtype=torch.float32)
@@ -272,26 +280,26 @@ else:
         print(f"  【{word}】 思考复杂度: {fe_maxuperank:.4f} | 自省肤浅度: {fe_introspect:.4f} ({status})")
 
     if final_freeenergy_report:
-        with open(path_output, "w", encoding="utf-8") as f_out:
+        with open(path_debug_output, "w", encoding="utf-8") as f_out:
             f_out.write(f"=== 符号自由能综合分析报告 ===\n")
             f_out.write(f"{'TraceID':<10}{'Word':<12}{'Type':<14}{'CosSimMax':<12}{'Complexity':<14}{'CosSimInt':<12}{'Introspect':<14}\n")
             f_out.write("-" * 92 + "\n")
             for tid, val in final_freeenergy_report.items():
                 f_out.write(f"{tid:<10}{val['word']:<12}{val['status']:<14}{val['cos_sim_max']:<12.6f}{val['fe_maxuperank']:<14.4f}{val['cos_sim_int']:<12.6f}{val['fe_introspect']:<14.4f}\n")
-        print(f"\n【第一部分】 处理成功，报告已保存: {path_output}")
+        print(f"\n【第一部分】 处理成功，报告已保存: {path_debug_output}")
 
     print("【第一部分】符号自由能分析完毕，终止脚本运行。")
-    sys.exit(0) # 既然三个层的重心均已算完，那么没有必要运行第二、三部分代码
+    if WORD_FIRST<0: sys.exit(0) # WORD_FIRST>=0则尝试更新张量缓存库。否则，既然三个语义空间的重心均已算完，没有必要继续运行第二、三部分代码
 
 
 
 
-# ==================== 第二部分：从本地张量缓存库中合成三组语义重心 ====================
-top500_freq_data = load_frequency_table(path_freq, limit=500)
+# ==================== 第二部分：从本地的三张量缓存库文件中读数据、合成三组语义空间的重心 ====================
+top500_freq_data = load_frequency_table_blcu(path_freq, limit=500)
 if top500_freq_data:
     missing_words = [item["word"] for item in top500_freq_data if item["word"] not in cached_tensors_introspect_map]
     if len(missing_words) > 0:
-        print(f"\n【第二部分】 未执行。原因是张量缓存库内尚缺 {len(missing_words)} 个高频词的张量")
+        print(f"\n【第二部分】 未执行。原因是缓存中缺失了 {len(missing_words)} 个高频词")
         print(f" 缺失的 word 示例，请在《高频词表》中查看行号并修改 WORD_FIRST: {missing_words[:10]}")
     else:
         print(f"\n【第二部分】 开始计算语义重心...")
@@ -319,14 +327,14 @@ if top500_freq_data:
             f_i.write(" ".join([f"{x.item():.8f}" for x in com_int]))
 
         print("【第二部分】重心更新完毕，终止脚本运行。")
-        sys.exit(0) # 既然张量缓存库已完整，那么没有必要运行第三部分代码
+        sys.exit(0) # 既然 三张量缓存库 已完整，那就没有必要继续运行第三部分代码
 
 
 
-# ==================== 第三部分：从大模型轮询三层张量并保存在张量缓存库文件 ====================
+# ==================== 第三部分：从大模型轮询三层张量并保存在《三张量缓存库文件》 ====================
 if WORD_FIRST >= 0:
     print("\n" + "="*70 + "\n【第三部分】激活大模型前向传播，多特征空间层并发安全提取与追加入库...")
-    all_words_to_run = load_frequency_table(path_freq, limit=None)
+    all_words_to_run = load_frequency_table_blcu(path_freq, limit=None)
     if all_words_to_run:
         tokenizer = AutoTokenizer.from_pretrained(model_name)
         model = AutoModelForCausalLM.from_pretrained(model_name, torch_dtype=torch.float16, device_map="cpu", low_cpu_mem_usage=True) #intel版mac 只能用cpu。请按自己硬件优化
@@ -343,10 +351,8 @@ if WORD_FIRST >= 0:
             # 确保输入 Tensor 移至模型对应设备（如果是GPU加速则必须）
             inputs = {k: v.to(target_device) for k, v in inputs.items()}
             positions = find_sublist_indices(tokenizer, inputs["input_ids"], word)
-            if not positions: continue
-
             # --- 如果出现multiple tokens，则打印 work、 positions、 tokens ---
-            if len(positions)>1 or word in ["你说的是","你说的","说的是","你说","说的","的是","你","说","的","是"]:
+            if not positions or len(positions)>1 or word in ["你说的是","你说的","说的是","你说","说的","的是","你","说","的","是"]:
                 input_ids_list = inputs["input_ids"][0].cpu().tolist() 
                 all_tokens_diagnostic = []
                 for multipletokenidx, multipletokentid in enumerate(input_ids_list):
@@ -370,14 +376,15 @@ if WORD_FIRST >= 0:
             if word in ["说的"] and default_text.startswith("你说的是{PAD4REPLACE}"): positions=[2]
             if word in ["你","说","的","是"] and default_text.startswith("你说的是{PAD4REPLACE}"): positions=[2]
             # ----------------------------
+            if not positions: continue
 
 
             with torch.no_grad():
                 outputs = model(**inputs, output_hidden_states=True)
 
-            tensor_emb = outputs.hidden_states[intrinsicdim_layer_index_embeddings][0, positions, :].mean(dim=0).cpu()
-            tensor_max = outputs.hidden_states[intrinsicdim_layer_index_maxuperank][0, positions, :].mean(dim=0).cpu()
-            tensor_int = outputs.hidden_states[intrinsicdim_layer_index_introspect][0, positions, :].mean(dim=0).cpu()
+            tensor_emb = outputs.hidden_states[intrinsicdim_embeddings_layer_index][0, positions, :].mean(dim=0).cpu()
+            tensor_max = outputs.hidden_states[intrinsicdim_maxuperank_layer_index][0, positions, :].mean(dim=0).cpu()
+            tensor_int = outputs.hidden_states[intrinsicdim_introspect_layer_index][0, positions, :].mean(dim=0).cpu()
 
             s_floats_emb = " ".join([f"{x.item():.8f}" for x in tensor_emb])
             s_floats_max = " ".join([f"{x.item():.8f}" for x in tensor_max])
@@ -386,15 +393,15 @@ if WORD_FIRST >= 0:
             record_line = f"{word}\t{s_floats_emb}\t{s_floats_max}\t{s_floats_int}\n"
             parts_check = record_line.strip().split("\t")
             if len(parts_check) == 4:
-                if len(parts_check[1].split()) == HIDDEN_DIM and \
-                   len(parts_check[2].split()) == HIDDEN_DIM and \
-                   len(parts_check[3].split()) == HIDDEN_DIM:
-                    with open(path_tensor, "a", encoding="utf-8") as f_tensor:
+                if len(parts_check[1].split()) == hidden_state_tensordim and \
+                   len(parts_check[2].split()) == hidden_state_tensordim and \
+                   len(parts_check[3].split()) == hidden_state_tensordim:
+                    with open(path_cached_tensors, "a", encoding="utf-8") as f_tensor:
                         f_tensor.write(record_line)
                         f_tensor.flush()
 
             already_extracted_words.add(word)
-            print(f" -> 第{global_idx}行 【{word}】 成功抓取了三张量并完成入库到本地张量缓存库")
+            print(f" -> 第{global_idx}行 【{word}】 成功计算三张量并保存入 三张量缓存库")
             gc.collect()
 
             del outputs, inputs
